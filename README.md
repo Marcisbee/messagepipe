@@ -44,10 +44,10 @@ npm install messagepipe
 
 ### Global transformers
 
-#### `relativeTime`
+#### `number`
 @TODO: Write about this
 
-#### `json`
+#### `plural`
 @TODO: Write about this
 
 #### `date`
@@ -56,13 +56,13 @@ npm install messagepipe
 #### `time`
 @TODO: Write about this
 
-#### `number`
-@TODO: Write about this
-
-#### `plural`
+#### `relativeTime`
 @TODO: Write about this
 
 #### `select`
+@TODO: Write about this
+
+#### `json`
 @TODO: Write about this
 
 ## API
@@ -80,30 +80,18 @@ Works with React and Preact out of the box. Just swap out `format` with `formatR
 ```tsx
 import { formatRaw } from 'messagepipe'
 
-function ListComponent(list) {
-  return (
-    <ul>
-      {list.map((value) => <li>{value}</li>)}
-    </ul>
-  );
+function Mention(username) {
+  const {href} = useUser(username)
+
+  return <a href={href}>{username}</a>
 }
 
-const transformers = {
-  ListComponent,
-}
+const transformers = { Mention }
 
 function App() {
-  const message = 'Planets: {planets | ListComponent}'
-  const planets = [
-    {
-      name: 'Mercury'
-    },
-    {
-      name: 'Venus'
-    }
-  ]
-  return <div>{formatRaw(message, {planets}, transformers)}</div>
-}
+  const message = 'Hello {name | Mention}'
+  return <div>{formatRaw(message, {name: 'john'}, transformers)}</div>
+} // => "<div>Hello <a href="...">john</a></div>"
 ```
 
 # Motivation
@@ -115,6 +103,7 @@ One immediate flat that messagepipe solves is ability to select nested propertie
 
 - [ ] Write up spec
   - [x] General idea
+    - `Hello {name}!` => `"Hello John!"`
   - [x] Selecting shallow values
     - `{name}` => `"John"`
   - [x] Selecting nested values
