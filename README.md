@@ -20,14 +20,14 @@ import { format } from 'messagepipe'
 
 const transformers = {
   reverse(value) {
-    return value.split('').reverse().join()
+    return value.split('').reverse().join('')
   },
   capitalize(value) {
     return value[0].toUpperCase() + value.slice(1).toLowerCase()
   },
 }
 
-format('Hello {planet | reverse}!', { planet: 'Mars' })
+format('Hello {planet | reverse | capitalize}!', { planet: 'Mars' }, transformers)
 ```
 
 ## Install

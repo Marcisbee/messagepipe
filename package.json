@@ -8,8 +8,8 @@
   "scripts": {
     "dev": "node -r tsm dev.ts",
     "build": "npm run build:esm && npm run build:cjs",
-    "build:esm": "esbuild src/index.ts --outfile=dist/index.esm.js --bundle --format=esm --sourcemap --define:process.env.NODE_ENV=\\\"production\\\"",
-    "build:cjs": "esbuild src/index.ts --outfile=dist/index.js --bundle --format=cjs --sourcemap --define:process.env.NODE_ENV=\\\"production\\\"",
+    "build:esm": "esbuild src/index.ts --minify --outfile=dist/index.esm.js --bundle --format=esm --sourcemap --define:process.env.NODE_ENV=\\\"production\\\"",
+    "build:cjs": "esbuild src/index.ts --minify --outfile=dist/index.js --bundle --format=cjs --sourcemap --define:process.env.NODE_ENV=\\\"production\\\"",
     "declarations": "tsc --declarationDir dist --emitDeclarationOnly --declaration",
     "test": "uvu -r tsm"
   },

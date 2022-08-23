@@ -23,7 +23,7 @@ export function formatRaw(
   params: Record<string, any> = {},
   transformers: Record<string, Function> = {},
 ) {
-  const chunks = message.replace(/\\[{]/g, '%7B').replace(/\\[}]/g, '%7D').split(/{|}/);
+  const chunks = message.split(/{|}/);
   const isOdd = chunks.length % 2;
 
   if (!isOdd) {
@@ -55,10 +55,10 @@ export function formatRaw(
 
         for (const option of args) {
           const [optionPath, optionValue] = option.trim().split(/\s*:\s*/);
-          if (optionValue[0] === '"' && optionValue[optionValue.length - 1] === '"') {
+          try {
             options[optionPath] = JSON.parse(optionValue);
-          } else {
-            options[optionPath] = optionValue;
+          } catch (e) {
+            throw new Error(`Invalid property value ${optionPath}:${optionValue}`);
           }
         }
 
@@ -73,8 +73,8 @@ export function formatRaw(
 
 export function format(
   message: string,
-  params: Record<string, any> = {},
-  transformers: Record<string, Function> = {},
+  params?: Record<string, any>,
+  transformers?: Record<string, Function>,
 ) {
   return formatRaw(message, params, transformers).join('');
 }
