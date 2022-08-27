@@ -1,2 +1,2 @@
-export { getGlobalTransformers } from './transformers';
-export { format, formatRaw } from './messagepipe';
+export { defaultTransformers, intlTransformers } from './transformers';
+export { MessagePipe } from './messagepipe';
