@@ -3,6 +3,7 @@ const tokenEnd = '}';
 const tokenPipe = '|';
 const tokenPipeArguments = ',';
 const tokenPipeArgumentsValue = ':';
+const tokenEscape = '\\';
 
 // "Hello {name} from the {planet | capitalize} {distance | number, unit:"lightyears"}"
 // (a) => "Hello " + a.name + " from the " + capitalize(a.planet) + " " + number(a.distance, {unit:'lightyears'})
@@ -22,13 +23,14 @@ function reducePipe(acc: string, [pipeName, ...pipeProps]: [string, ...[string, 
     + acc
     + (!pipeProps.length
         ? ''
-        : ',{' + pipeProps.map(mapPipeProps).join() + '}')
+        : (acc.trim() ? '' : 'void 0') + ',{' + pipeProps.map(mapPipeProps).join() + '}')
     + ')';
 }
 
 export function parser(text: string): string[] {
   const output: string[] = [];
   let chunk = '';
+  let previousToken = '';
 
   // This is where message starts.
   // "Hello {name}!"
@@ -40,7 +42,12 @@ export function parser(text: string): string[] {
     let localPipeIndex = -1;
 
     function end(index: number) {
-      const selector = localSelector ? 'a.' + localSelector : '';
+      const selectorTrim = localSelector.trim();
+      const selector = selectorTrim
+        ? selectorTrim[0] === '['
+          ? 'a' + selectorTrim
+          : 'a.' + selectorTrim
+        : '';
       const output = localPipes.reduce(reducePipe, selector);
 
       return {
@@ -51,6 +58,12 @@ export function parser(text: string): string[] {
 
     for (let i = startIndex; i < text.length; i++) {
       const char = text[i];
+      const escaped = previousToken === tokenEscape;
+      previousToken = char;
+
+      if (char === tokenEscape) {
+        continue;
+      }
 
       if (tokenPipe === char) {
         localPipeIndex += 1;
@@ -59,12 +72,14 @@ export function parser(text: string): string[] {
       }
 
       // Handle message inside selector
-      if (tokenStart === char && localPipeIndex === -1) {
+      if (tokenStart === char && localPipeIndex === -1 && !escaped) {
         const messageData = messageStart(i + 1);
         i = messageData.index;
+
         if (localSelector[localSelector.length - 1] === '.') {
           localSelector = localSelector.slice(0, -1);
         }
+
         localSelector += '[' + messageData.output + ']';
         continue;
       }
@@ -89,7 +104,7 @@ export function parser(text: string): string[] {
           }
 
           // Handle message inside arguments
-          if (tokenStart === char) {
+          if (tokenStart === char && !escaped) {
             const messageData = messageStart(i + 1);
             i = messageData.index;
             args[args.length - 1] += messageData.output;
@@ -101,7 +116,7 @@ export function parser(text: string): string[] {
         }
 
         // Message starts is outside allowed zones
-        if (tokenStart === char) {
+        if (tokenStart === char && !escaped) {
           fail(char, i);
         }
 
@@ -122,8 +137,14 @@ export function parser(text: string): string[] {
 
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
+    const escaped = previousToken === tokenEscape;
+    previousToken = char;
 
-    if (tokenStart === char) {
+    if (char === tokenEscape) {
+      continue;
+    }
+
+    if (tokenStart === char && !escaped) {
       output.push(JSON.stringify(chunk));
       chunk = '';
       const messageData = messageStart(i + 1);
