@@ -1,2 +1,2 @@
 export { defaultTransformers, intlTransformers } from './transformers';
-export { MessagePipe } from './messagepipe';
+export { MessagePipe, MessagePipeTransformer, MessagePipeTransformers } from './messagepipe';

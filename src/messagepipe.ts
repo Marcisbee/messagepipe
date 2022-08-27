@@ -1,11 +1,19 @@
 import { parser } from './parser';
 
-export function MessagePipe(transformers: Record<string, any> = {}) {
-  function compileRaw(message: string) {
+export interface MessagePipeTransformer<Input = string, Output = string> {
+  (value: Input, options?: Record<string, any>): Output;
+}
+
+export interface MessagePipeTransformers {
+  [key: string]: MessagePipeTransformer;
+}
+
+export function MessagePipe(transformers: MessagePipeTransformers = {}) {
+  function compileRaw<Output = string[]>(message: string): (props?: Record<string, any>) => Output {
     return Function('b', 'return (a)=>[' + parser(message).join(',') + ']')(transformers);
   }
 
-  function compile(message: string) {
+  function compile<Output = string>(message: string): (props?: Record<string, any>) => Output {
     return Function('b', 'return (a)=>' + parser(message).join('+'))(transformers);
   }
 
