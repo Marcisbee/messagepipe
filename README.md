@@ -1,8 +1,5 @@
 # ![messagepipe](./assets/logo-light.svg#gh-dark-mode-only)![messagepipe](./assets/logo-dark.svg#gh-light-mode-only)
 
-<a href="https://github.com/Marcisbee/messagepipe/actions">
-  <img alt="publish" src="https://img.shields.io/github/workflow/status/Marcisbee/messagepipe/publish?style=flat-square" />
-</a>
 <a href="https://snyk.io/test/github/Marcisbee/messagepipe">
   <img alt="snyk" src="https://img.shields.io/snyk/vulnerabilities/github/Marcisbee/messagepipe?style=flat-square" />
 </a>
