@@ -55,7 +55,7 @@ npm install messagepipe
 
 ### Core concepts
 
-```js
+```
           ┌-transformer
           |     ┌-argument name
           |     |     ┌-argument value
