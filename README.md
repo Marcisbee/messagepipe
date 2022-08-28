@@ -32,6 +32,7 @@ const msg = MessagePipe().compile('Hello {planet}!')
 
 msg({ planet: 'Mars' }) // => "Hello Mars!"
 ```
+[live demo](https://runkit.com/marcisbee/messagepipe-demo-1)
 
 ```ts
 import { MessagePipe } from 'messagepipe'
@@ -45,6 +46,7 @@ const msg = compile('Hello {planet | reverse | capitalize}!')
 
 msg({ planet: 'Mars' }) // => "Hello Sram!"
 ```
+[live demo](https://runkit.com/marcisbee/messagepipe-demo-2)
 
 ## Install
 
@@ -262,6 +264,7 @@ function App() {
   return <div>{msg({name: 'john'})}</div>
 } // => "<div>Hello <a href="...">john</a>!</div>"
 ```
+Live demo on [Stackblitz](https://stackblitz.com/edit/vitejs-vite-2cz8zx?file=src%2FApp.tsx&terminal=dev).
 
 Since we used [compileRaw](#compileraw), library would output something like this: `['Hello ', [ReactElement], '!']`.
 
