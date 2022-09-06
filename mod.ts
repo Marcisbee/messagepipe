@@ -1,1 +1,2 @@
-export * from './src/index';
+// @ts-ignore
+export * from './src/index.ts';

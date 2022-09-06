@@ -1,0 +1,33 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js 16.x
+      uses: actions/setup-node@v1
+      with:
+        node-version: 16.x
+    - name: install
+      run: npm ci
+    - name: test
+      run: npm run test
+      env:
+        CI: true
+    - name: lint
+      run: npm run lint
+      env:
+        CI: true
+    - name: build
+      run: npm run build
+      env:
+        CI: true
+    - name: declarations
+      run: npm run declarations
+      env:
+        CI: true
