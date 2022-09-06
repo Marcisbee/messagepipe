@@ -89,7 +89,7 @@ const transformers = {
     transformers,
   ],
 ] as const).forEach(([input, output, props, transformers]) => {
-  const messagePipeWithTransformers = MessagePipe(transformers);
+  const messagePipeWithTransformers = MessagePipe(transformers as any);
 
   testCompile(`returns transformed value ${JSON.stringify(output)}`, () => {
     assert.equal(messagePipeWithTransformers.compile(input)(props), output);

@@ -21,9 +21,9 @@ function reducePipe(acc: string, [pipeName, ...pipeProps]: [string, ...[string, 
     + pipeName
     + '('
     + acc
-    + (!pipeProps.length
-        ? ''
-        : (acc.trim() ? '' : 'void 0') + ',{' + pipeProps.map(mapPipeProps).join() + '}')
+    + (pipeProps.length
+        ? (acc.trim() ? '' : 'void 0') + ',{' + pipeProps.map(mapPipeProps).join() + '}'
+        : '')
     + ')';
 }
 
