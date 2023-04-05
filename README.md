@@ -9,6 +9,9 @@
 <a href="https://bundlephobia.com/result?p=messagepipe">
   <img alt="package size" src="https://img.shields.io/bundlephobia/minzip/messagepipe?style=flat-square" />
 </a>
+<a href="https://discord.gg/a62gfaDW2e">
+  <img alt="discord" src="https://dcbadge.vercel.app/api/server/a62gfaDW2e?style=flat-square" />
+</a>
 
 <br />
 
