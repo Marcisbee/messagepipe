@@ -127,8 +127,8 @@ function increment(value: number, { by = 1 }: Record<string, any> = {}) {
 
 We can now use it like this:
 - `"{count | increment}"` + `{ count: 1 }` => `2`;
-- `"{count | increment | by:1}"` + `{ count: 1 }` => `2`;
-- `"{count | increment | by:5}"` + `{ count: 1 }` => `6`.
+- `"{count | increment, by:1}"` + `{ count: 1 }` => `2`;
+- `"{count | increment, by:5}"` + `{ count: 1 }` => `6`.
 
 We can stack any number of arguments separated by `,` (comma).
 
