@@ -1,35 +1,59 @@
+// Bound retention when dynamic messages produce many distinct Intl options.
+function formatterCache<T>(create: (options: Record<string, any>) => T) {
+  const cache = new Map<string, T>();
+  return (options: Record<string, any>): T => {
+    const entries = Object.entries(options).filter(([, value]) => value !== undefined);
+    // Preserve Intl coercion semantics for non-primitive values and non-finite numbers.
+    if (entries.some(([, value]) => !['string', 'number', 'boolean'].includes(typeof value)
+      || (typeof value === 'number' && !Number.isFinite(value)))) {
+      return create(options);
+    }
+    const key = JSON.stringify(entries.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
+    let formatter = cache.get(key);
+    if (!formatter) {
+      formatter = create(options);
+      if (cache.size >= 100) {
+        cache.delete(cache.keys().next().value!);
+      }
+      cache.set(key, formatter);
+    }
+    return formatter;
+  };
+}
+
 export function intlTransformers(locale: string = 'en-GB') {
+  const number = formatterCache(options => new Intl.NumberFormat(locale, options));
+  const date = formatterCache(options => new Intl.DateTimeFormat(locale, options));
+  const plural = formatterCache(options => new Intl.PluralRules(locale, options));
+  const relativeTime = formatterCache(options => new Intl.RelativeTimeFormat(locale, options));
   const globalTransformers: Record<string, (value: string, options?: Record<string, any>) => string> = {
     relativeTime(value, { type = 'hour', ...options } = {}) {
-      return new Intl.RelativeTimeFormat(locale, {
-        ...options,
-      }).format(Number(value) / 1000 / 60 / 60, type);
+      // Calendar units use fixed approximations because the input is a duration.
+      const seconds: Record<string, number> = {
+        second: 1, minute: 60, hour: 3600, day: 86400, week: 604800,
+        month: 2592000, quarter: 7776000, year: 31536000,
+      };
+      const unit = type.replace(/s$/, '');
+      return relativeTime(options).format(Number(value) / 1000 / (seconds[unit] || 1), type);
     },
-    date(value) {
-      return new Intl.DateTimeFormat(locale, {
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-      }).format(value as any);
+    date(value, options = {}) {
+      const defaults = options.dateStyle || options.timeStyle ? {} : {
+        year: 'numeric', month: 'numeric', day: 'numeric',
+      };
+      return date({ ...defaults, ...options }).format(value as any);
     },
-    time(value) {
-      return new Intl.DateTimeFormat(locale, {
-        hour: 'numeric',
-        minute: 'numeric',
-        second: 'numeric',
-      }).format(value as any);
+    time(value, options = {}) {
+      const defaults = options.dateStyle || options.timeStyle ? {} : {
+        hour: 'numeric', minute: 'numeric', second: 'numeric',
+      };
+      return date({ ...defaults, ...options }).format(value as any);
     },
-    plural(value, { type = 'cardinal', ...options } = {}) {
-      return options[new Intl.PluralRules(locale, { type }).select(value as any)]?.replace('#', value);
+    plural(value, { zero, one, two, few, many, other, ...options } = {}) {
+      const choices: Record<string, string> = { zero, one, two, few, many, other };
+      return (choices[plural(options).select(value as any)] ?? other)?.split('#').join(value);
     },
-    number(value, { style, currency, unit, unitDisplay, maximumSignificantDigits } = {}) {
-      return new Intl.NumberFormat(locale, {
-        style,
-        currency,
-        unit,
-        unitDisplay,
-        maximumSignificantDigits,
-      }).format(value as any);
+    number(value, options = {}) {
+      return number(options).format(value as any);
     },
   };
 
@@ -42,7 +66,7 @@ export function defaultTransformers() {
       return JSON.stringify(value);
     },
     select(value, options = {}) {
-      return options[value] || options.other;
+      return Object.prototype.hasOwnProperty.call(options, value) ? options[value] : options.other;
     },
   };
 

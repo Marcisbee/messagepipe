@@ -11,8 +11,7 @@
 
 Formats message strings with number, date, plural, and select placeholders to create localized messages.
 
-* **Small.** Between 700 bytes and 1.3 kilobytes (minified and gzipped).
-  Zero dependencies.
+* **Small.** Zero runtime dependencies.
 * **Fast.** Does absolute minimum amount of computations necessary. View [benchmarks](#benchmarks).
 * **Tree Shakable.** Includes separate global transformers config that can be omitted.
 * **Pipe syntax.** Transformer functions can customized and chained.
@@ -111,6 +110,12 @@ const msgPipe = MessagePipe({
 This would be valid use case for it: `"Greetings {name | capitalize}!"`.
 
 ### Argument
+
+Single- and double-quoted argument values may contain delimiters such as commas,
+colons, pipes, and braces. JavaScript string escapes are preserved inside quotes.
+Outside placeholders, a backslash escapes the following character; use two
+backslashes for a literal backslash.
+
 To allow more functionality, we can use arguments, that are passed to transformer function.
 
 ```ts
@@ -197,13 +202,33 @@ const msg = compile('Currently it is {now | time}')
 msg({ now: new Date('1983-05-25 16:42') }) // "Currently it is 16:42:00"
 ```
 
+#### relativeTime
+
+Formats a duration in **milliseconds**, using hours by default. Set `type` to an
+Intl relative-time unit (singular or plural); other options, such as `numeric`,
+are forwarded to `Intl.RelativeTimeFormat`.
+
+```ts
+const msg = compile('{duration | relativeTime, type:"day", numeric:"auto"}')
+msg({ duration: 86400000 }) // "tomorrow" (English locale)
+```
+
+Months, quarters, and years use fixed durations of 30, 90, and 365 days. For
+calendar-aware differences, compute the duration in your application first.
+
+Intl formatters are reused per `intlTransformers(locale)` instance, with at most
+100 option combinations retained per formatter kind. Dynamic option values
+continue to work. Date and time component defaults are omitted when `dateStyle`
+or `timeStyle` is supplied. Plural selection falls back to `other` and replaces
+every `#` in the selected text; an explicitly empty selection stays empty.
+
 ## API
 
 ### `MessagePipe`
 This is the main function that takes in all the transformers that will be available to all the messages.
 
 ```ts
-function MessagePipe(transformers?: MessagePipeTransformers): {
+function MessagePipe(transformers?: MessagePipeTransformers, options?: { disableCache?: boolean }): {
   compileRaw(message: string): (props?: Record<string, any>) => string[]
   compile(message: string): (props?: Record<string, any>) => string
 }
@@ -216,6 +241,14 @@ const messagePipe = MessagePipe({
   hello: (value) => `Hello ${value}!`,
 })
 ```
+
+Compiled messages are cached within each MessagePipe instance, so transformer
+sets and locales stay independent. Set `disableCache: true` to bypass message
+caching. Omitted props are treated as an empty object.
+
+Message templates are trusted application code: compilation uses `Function`
+and evaluates JavaScript selector and argument expressions. Do not compile
+untrusted templates. This also requires a CSP that allows dynamic compilation.
 
 Now all the messages that get compiled from `messagePipe` can use this transformer like so `"{name | hello}"`.
 

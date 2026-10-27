@@ -30,7 +30,6 @@ function reducePipe(acc: string, [pipeName, ...pipeProps]: [string, ...[string, 
 export function parser(text: string): string[] {
   const output: string[] = [];
   let chunk = '';
-  let previousToken = '';
 
   // This is where message starts.
   // "Hello {name}!"
@@ -40,6 +39,8 @@ export function parser(text: string): string[] {
     let localSelector = '';
     let localPipes: [string, ...[string, string][]][] = [];
     let localPipeIndex = -1;
+    let quote = '';
+    let escaped = false;
 
     function end(index: number) {
       const selectorTrim = localSelector.trim();
@@ -58,10 +59,24 @@ export function parser(text: string): string[] {
 
     for (let i = startIndex; i < text.length; i++) {
       const char = text[i];
-      const escaped = previousToken === tokenEscape;
-      previousToken = char;
-
-      if (char === tokenEscape) {
+      // Quoted JavaScript strings are opaque to message delimiters.
+      if (quote || char === '"' || char === "'") {
+        if (localPipeIndex === -1) {
+          localSelector += char;
+        } else {
+          const pipe = localPipes[localPipeIndex];
+          const args = pipe[pipe.length - 1];
+          if (!Array.isArray(args)) {
+            fail(char, i);
+          }
+          args[args.length - 1] += char;
+        }
+        if (!quote) {
+          quote = char;
+        } else if (!escaped && char === quote) {
+          quote = '';
+        }
+        escaped = !escaped && char === tokenEscape;
         continue;
       }
 
@@ -137,14 +152,12 @@ export function parser(text: string): string[] {
 
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
-    const escaped = previousToken === tokenEscape;
-    previousToken = char;
-
     if (char === tokenEscape) {
+      chunk += text[++i] ?? tokenEscape;
       continue;
     }
 
-    if (tokenStart === char && !escaped) {
+    if (tokenStart === char) {
       output.push(JSON.stringify(chunk));
       chunk = '';
       const messageData = messageStart(i + 1);
