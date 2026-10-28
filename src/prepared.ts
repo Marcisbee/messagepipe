@@ -32,3 +32,40 @@ export function memoizeFormat(format: Transform): Transform {
     return output;
   };
 }
+
+// Dynamic arguments are evaluated by the generated function before this lookup.
+// Only immutable option values can safely reuse a prepared closure.
+export function prepareDynamic(prepare: (options: Record<string, any>) => Transform, keys: string[]) {
+  const cache = new Map<string, Transform>();
+  let previous: Record<string, any> | undefined;
+  let previousRender: Transform | undefined;
+  return (options: Record<string, any>): Transform | undefined => {
+    let same = previous !== undefined;
+    let key = '';
+    for (const name of keys) {
+      const value = options[name];
+      const type = typeof value;
+      if ((value !== null && type !== 'string' && type !== 'number' && type !== 'boolean' && type !== 'undefined')
+        || (type === 'number' && !Number.isFinite(value))) {
+        return undefined;
+      }
+      same = same && Object.is(value, previous![name]);
+      const text = Object.is(value, -0) ? '-0' : String(value);
+      key += type + ':' + text.length + ':' + text;
+    }
+    if (same) {
+      return previousRender;
+    }
+    let render = cache.get(key);
+    if (!render) {
+      render = prepare(options);
+      if (cache.size >= 16) {
+        cache.delete(cache.keys().next().value!);
+      }
+      cache.set(key, render);
+    }
+    previous = options;
+    previousRender = render;
+    return render;
+  };
+}

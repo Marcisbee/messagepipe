@@ -95,7 +95,15 @@ export function intlTransformers(locale: string = 'en-GB') {
     return memoizeFormat(value => {
       const category = rules.select(value);
       const chunks = parts[category] ?? (choices[category] == null ? parts.other : undefined);
-      return chunks ? chunks.join(value) : (choices[category] ?? other)?.split('#').join(value);
+      if (chunks) {
+        // The common single-marker case needs no temporary join operation.
+        // Preserve join's coercion behavior for objects and other input types.
+        if (chunks.length === 2 && (typeof value === 'number' || typeof value === 'string')) {
+          return chunks[0] + value + chunks[1];
+        }
+        return chunks.join(value);
+      }
+      return (choices[category] ?? other)?.split('#').join(value);
     });
   });
 
@@ -120,7 +128,7 @@ export function defaultTransformers() {
         return select(value, options);
       }
       const choice = choices[value];
-      return choice === undefined ? options.other : choice;
+      return choice !== undefined || Object.prototype.hasOwnProperty.call(choices, value) ? choice : options.other;
     };
   });
 

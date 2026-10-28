@@ -167,4 +167,38 @@ for (const locale of ['en-GB', 'de-DE', 'ar', 'lv']) {
   });
 }
 
+for (const template of ['{x|number,minimumFractionDigits:2}', '{x|number,minimumFractionDigits:{digits}}']) {
+  test(`transformer lookup precedes argument evaluation: ${template}`, () => {
+    const transformers = intlTransformers('en-GB');
+    const original = transformers.number;
+    const render = MessagePipe(transformers).compile(template);
+    const props = { get x() { transformers.number = () => 'replacement'; return 1; }, digits: 2 };
+    assert.equal(render(props), '1.00');
+    assert.equal(render({ x: 1, digits: 2 }), 'replacement');
+    transformers.number = original;
+    assert.equal(render({ x: 1, get digits() { transformers.number = () => 'replacement'; return 2; } }), '1.00');
+  });
+}
+
+test('dynamic preparation preserves option changes, objects and undefined choices', () => {
+  const pipe = MessagePipe({ ...intlTransformers('en-GB'), ...defaultTransformers() });
+  const number = pipe.compile('{x|number,minimumFractionDigits:{digits},maximumFractionDigits:{digits}}');
+  for (let digits = 0; digits < 20; digits++) {
+    assert.equal(number({ x: 1, digits }), digits ? '1.' + '0'.repeat(digits) : '1');
+  }
+  assert.equal(number({ x: 1, digits: 2 }), '1.00');
+  let digits = 3;
+  const mutable = { valueOf: () => digits };
+  assert.equal(number({ x: 1, digits: mutable }), '1.000');
+  digits = 2;
+  assert.equal(number({ x: 1, digits: mutable }), '1.00');
+  assert.throws(() => number({ x: 1, digits: -1 }), RangeError);
+  const select = pipe.compileRaw('{key|select,match:{choice},other:"fallback"}');
+  assert.equal(select({ key: 'match', choice: undefined }), ['', undefined, '']);
+  assert.equal(select({ key: 'match', choice: null }), ['', null, '']);
+  assert.equal(select({ key: 'match', choice: '' }), ['', '', '']);
+  assert.equal(select({ key: 'missing', choice: undefined }), ['', 'fallback', '']);
+});
+
+
 test.run();

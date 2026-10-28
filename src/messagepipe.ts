@@ -1,5 +1,5 @@
 import { parser } from './parser';
-import { preparations, type Transform } from './prepared';
+import { preparations, prepareDynamic, type Transform } from './prepared';
 
 export interface MessagePipeTransformer<Input = string, Output = string> {
   (value: Input, options?: Record<string, any>): Output;
@@ -19,24 +19,37 @@ export function MessagePipe(transformers: MessagePipeTransformers = {}, { disabl
   const scache: Record<string, any> = Object.create(null);
 
   function build(message: string, raw: boolean) {
-    const prepared: Transform[] = [];
+    const prepared: Function[] = [];
     const chunks = parser(message, (name, input, props) => {
       const original = Object.getOwnPropertyDescriptor(transformers, name)?.value;
       const prepare = preparations.get(original);
       // Only scalar literals are safe to move out of the render path. Dynamic
       // selectors, expressions and custom transformers keep their original behavior.
       const literal = /^(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|true|false|null)$/;
-      if (!prepare || props.some(([key, value]) =>
-        !/^[A-Za-z_$][\w$]*$/.test(key.trim()) || (value !== undefined && !literal.test(value.trim())))) {
+      if (!prepare || props.some(([key]) => !/^[A-Za-z_$][\w$]*$/.test(key.trim()) || key.trim() === '__proto__')) {
         return undefined;
       }
+      const constant = props.every(([, value]) => value === undefined || literal.test(value.trim()));
       const source = '{' + props.map(([key, value = 'true']) => key + ':' + value).join(',') + '}';
+      const target = 'b[' + JSON.stringify(name) + ']';
+      if (!constant) {
+        const getRender = prepareDynamic(prepare, props.map(([key]) => key.trim()));
+        const index = prepared.push((current: Transform, value: any, options: Record<string, any>) => {
+          if (current === original) {
+            const render = getRender(options);
+            if (render) {
+              return render(value);
+            }
+          }
+          return current.call(transformers, value, options);
+        }) - 1;
+        return 'c[' + index + '](' + target + ',' + (input.trim() ? input : 'void 0') + ',' + source + ')';
+      }
       const createOptions = Function('return (' + source + ')');
       const options = createOptions();
       // Preparation stays lazy so invalid Intl options still throw on rendering.
       let render: Transform | undefined;
-      const index = prepared.push(value => {
-        const current = transformers[name];
+      const index = prepared.push((current: Transform, value: any) => {
         if (current !== original) {
           if (props.length) {
             return current.call(transformers, value, createOptions());
@@ -46,7 +59,7 @@ export function MessagePipe(transformers: MessagePipeTransformers = {}, { disabl
         render ??= prepare(options);
         return render(value);
       }) - 1;
-      return 'c[' + index + '](' + input + ')';
+      return 'c[' + index + '](' + target + (input.trim() ? ',' + input : '') + ')';
     });
     const expression = raw ? '[' + chunks.join(',') + ']'
       : chunks.filter((chunk, index) => index === 0 || chunk !== '""').join('+');

@@ -29,6 +29,11 @@ const workloads = [
   ['number', '{x|number,style:"currency",currency:"EUR"}', '{x, number, ::currency/EUR}', [
     [{ x: 1234.5 }, '€1,234.50'], [{ x: 0 }, '€0.00'], [{ x: -42 }, '-€42.00'],
   ]],
+  ['dynamic number', '{x|number,minimumFractionDigits:{digits},maximumFractionDigits:{digits}}',
+    '{digits, select, 2{{x, number, ::.00}} other{{x, number, ::.000}}}', [
+      [{ x: 1.25, digits: 2 }, '1.25'], [{ x: 42, digits: 3 }, '42.000'],
+      [{ x: -8, digits: 2 }, '-8.00'],
+    ]],
   ['date', '{x|date}', '{x, date, ::ddMMyyyy}', [
     [{ x: 0 }, '01/01/1970'], [{ x: 86400000 }, '02/01/1970'],
     [{ x: 172800000 }, '03/01/1970'],
@@ -43,7 +48,13 @@ if (varied) {
   const date = new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'numeric', day: 'numeric' });
   for (const workload of workloads) {
     const [name] = workload;
-    if (name === 'number' || name === 'date' || name === 'plural') {
+    if (name === 'dynamic number') {
+      workload[3] = Array.from({ length: 1000 }, (_, i) => {
+        const digits = i % 2 ? 3 : 2;
+        const x = i / 4;
+        return [{ x, digits }, new Intl.NumberFormat('en-GB', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(x)];
+      });
+    } else if (name === 'number' || name === 'date' || name === 'plural') {
       workload[3] = Array.from({ length: 1000 }, (_, i) => {
         const x = name === 'date' ? i * 86400000 : name === 'plural' ? i : i + 1000;
         return [{ x }, name === 'number' ? number.format(x) : name === 'date' ? date.format(x) : x === 1 ? 'one' : x + ' items'];

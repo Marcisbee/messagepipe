@@ -242,13 +242,16 @@ const messagePipe = MessagePipe({
 })
 ```
 
-Built-in number, date, time, plural, and select pipes with scalar literal options
-prepare their options on first render. Number/date/time/plural pipes retain at
-most 100 formatted scalar values per compiled pipe. After 100 consecutive cache
-misses, that result cache is cleared and bypassed for the lifetime of the pipe.
-Mutable objects, omitted values, and negative zero bypass result caching.
-Dynamic options and custom transformers retain their normal per-call behavior.
-Replacing a transformer is still observed by already-compiled messages.
+Built-in number, date, time, plural, and select pipes prepare scalar literal
+options on first render. Dynamic arguments are still evaluated on every render,
+with preparation reused for at most 16 primitive option combinations per pipe.
+Object-valued options use the generic path to preserve mutable coercion behavior.
+Each prepared number/date/time/plural variant retains at most 100 scalar results
+(up to 1,600 for a dynamic pipe). After 100 consecutive misses, that variant's
+result cache is cleared and bypassed for its lifetime. Mutable inputs, omitted
+values, and negative zero bypass result caching. Custom transformers keep their
+normal per-call behavior. Already-compiled messages observe replacement functions
+and resolve the transformer before evaluating its arguments.
 
 Compiled messages are cached within each MessagePipe instance, so transformer
 sets and locales stay independent. Set `disableCache: true` to bypass message
@@ -282,31 +285,35 @@ pinned for reproducibility and is development-only.
 
 | Workload | MessageFormat (ops/s) | MessagePipe (ops/s) | MessagePipe / MessageFormat |
 | --- | ---: | ---: | ---: |
-| Plain text: `Wow` | 255,376,701 | 270,826,783 | 1.06× |
-| Interpolation: `Hello {planet}` | 129,480,176 | 129,084,392 | 1.00× |
-| Select: gender pronoun | 73,510,434 | 107,647,250 | 1.46× |
-| Number: EUR currency | 4,729,385 | 74,172,405 | 15.68× |
-| Date: day/month/year | 2,363,663 | 72,330,073 | 30.60× |
-| Plural: item count | 4,274,800 | 64,555,366 | 15.10× |
+| Plain text: `Wow` | 256,691,037 | 271,400,102 | 1.06× |
+| Interpolation: `Hello {planet}` | 128,767,263 | 128,096,099 | 0.99× |
+| Select: gender pronoun | 74,325,542 | 107,985,658 | 1.45× |
+| Number: EUR currency | 4,580,702 | 88,778,039 | 19.38× |
+| Number: dynamic fraction digits | 2,230,485 | 8,701,840 | 3.90× |
+| Date: day/month/year | 2,386,225 | 86,707,280 | 36.34× |
+| Plural: item count | 4,163,758 | 86,921,254 | 20.88× |
 
 Higher throughput is better. Select and the Intl workloads are faster in these
 measurements; interpolation is effectively tied. The small plain-text difference
 is sensitive to loop overhead and does not establish a universal speed advantage.
 
-The number, date, and plural rows above rotate three values and benefit from
+The number, dynamic-number, date, and plural rows above rotate three values and benefit from
 bounded formatted-value reuse. To expose cache-miss costs, a second run rotates
 **1,000 distinct inputs** for each Intl workload:
 
 | Workload | MessageFormat (ops/s) | MessagePipe (ops/s) | MessagePipe / MessageFormat |
 | --- | ---: | ---: | ---: |
-| Number | 4,617,836 | 6,171,794 | 1.34× |
-| Date | 2,342,674 | 2,648,567 | 1.13× |
-| Plural | 3,332,201 | 3,767,459 | 1.13× |
+| Number: EUR currency | 4,694,507 | 6,450,686 | 1.37× |
+| Number: dynamic fraction digits | 2,021,094 | 2,734,714 | 1.35× |
+| Date: day/month/year | 2,352,332 | 2,740,688 | 1.17× |
+| Plural: item count | 3,378,905 | 5,726,339 | 1.69× |
 
 Both libraries compile once before timing and receive equivalent templates,
 locales, and inputs. Every input must produce the same expected string in both
 libraries before measurement; timed calls contribute to a checked output
-checksum. Compiler initialization and compilation are excluded.
+checksum. The dynamic-number workload alternates two and three fraction digits;
+MessagePipe uses dynamic pipe arguments and MessageFormat selects between two
+compiled number skeletons. Compiler initialization and compilation are excluded.
 
 Tables use the median of **21 samples** per library and workload, collected in
 three independent processes with seven samples each. Each sample performs
