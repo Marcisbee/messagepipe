@@ -263,13 +263,45 @@ This is practically the same as [compile](#compile) but instead of it returning 
 So from the example that was before, the output of that message would be `(a) => ["Hello ", capitalize(a.name), "!"]`.
 
 ## Benchmarks
-It is necessary for me that this library is as small and as fast as possible. Since this library compares directly with MessageFormat, I treated both as equal in benchmarks.
 
-Message | MessageFormat | MessagePipe | Improvement
-|-|-|-|-|
-["Wow"](https://fastbench.dev/Format-%22Wow%22-JtYOF/0) | 926,368 ops/s | __1,847,253 ops/s__ | 2x
-["Hello {planet}"](https://fastbench.dev/Format-%22Hello-planet%22-tKWLnH/0) | 560,131 ops/s | __1,024,051 ops/s__ | 1.8x
-[select transformer](https://fastbench.dev/Format-select-MovWE/0) | 209,513 ops/s | __337,226 ops/s__ | 1.6x
+Repeated formatting before and after the Intl formatter-cache changes, measured
+on 2026-10-28. The baseline is commit `ef20fcd`; both revisions use minified
+CommonJS builds from the same esbuild version. Lower elapsed time is better.
+
+| Workload | Before | Current | Speedup |
+| --- | ---: | ---: | ---: |
+| Number: EUR currency, `1234.5` | 125.10 ms | 10.93 ms | 11.4× |
+| Date: default format, epoch `0` | 262.21 ms | 16.04 ms | 16.3× |
+| Plural: `5` items | 75.88 ms | 5.47 ms | 13.9× |
+
+Each cell is the median of five samples of 10,000 calls after 1,000 warmup calls.
+Messages are compiled once before timing, with fixed props and options. The
+runner checks the formatted output and prints every sample plus runtime metadata.
+The measured host used Linux x64 (WSL), an AMD Ryzen 9 9950X, Node 22.23.2,
+ICU 78.2, locale `en-GB`, and timezone UTC.
+
+Run the current build:
+
+```sh
+npm ci
+npm run build
+npm run benchmark
+```
+
+To compare the baseline with the same runner:
+
+```sh
+git worktree add --detach ../messagepipe-baseline ef20fcd
+(cd ../messagepipe-baseline && npm ci && npm run build)
+npm run benchmark -- ../messagepipe-baseline/dist/index.js
+```
+
+These measurements cover repeated formatting with reusable Intl options.
+Compilation, cold formatter construction, and changing option combinations have
+different costs. Timings vary with runtime, hardware, and garbage collection;
+they are not application-wide throughput guarantees. The formatter caches retain
+at most 100 combinations per kind. Inherited or accessor-backed option objects
+bypass caching to preserve Intl behavior.
 
 ## Framework integration
 Works with React and Preact out of the box. Just swap out [`compile`](#compile) with [`compileRaw`](#compile) and good to go. This works because it returns raw array of values that was the output of selectors and transformers.

@@ -2,7 +2,18 @@
 function formatterCache<T>(create: (options: Record<string, any>) => T) {
   const cache = new Map<string, T>();
   return (options: Record<string, any>): T => {
-    const entries = Object.entries(options).filter(([, value]) => value !== undefined);
+    const prototype = Object.getPrototypeOf(options);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return create(options);
+    }
+    const descriptors = Object.entries(Object.getOwnPropertyDescriptors(options));
+    // Let Intl read accessors itself, exactly once and in its specified order.
+    if (descriptors.some(([, descriptor]) => !('value' in descriptor))) {
+      return create(options);
+    }
+    const entries = descriptors
+      .map(([key, descriptor]) => [key, descriptor.value] as [string, any])
+      .filter(([, value]) => value !== undefined);
     // Preserve Intl coercion semantics for non-primitive values and non-finite numbers.
     if (entries.some(([, value]) => !['string', 'number', 'boolean'].includes(typeof value)
       || (typeof value === 'number' && !Number.isFinite(value)))) {

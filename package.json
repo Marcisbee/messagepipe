@@ -13,7 +13,8 @@
     "declarations": "tsc --declarationDir dist --emitDeclarationOnly --declaration",
     "test": "uvu -r tsm",
     "lint": "rome check ./src/",
-    "test:package": "node scripts/test-package.cjs"
+    "test:package": "node scripts/test-package.cjs",
+    "benchmark": "node scripts/benchmark.cjs"
   },
   "repository": {
     "type": "git",

@@ -80,4 +80,22 @@ test('raw compilation preserves values and bypassed caches stay independent', ()
   assert.is.not(pipe.compileRaw('x'), pipe.compileRaw('x'));
 });
 
+test('number options preserve inherited and non-enumerable properties', () => {
+  const { number } = intlTransformers('en-GB');
+  assert.equal(number('0.5'), '0.5');
+  assert.equal(number('0.5', Object.create({ style: 'percent' })), '50%');
+  assert.equal(number('0.5', Object.defineProperty({}, 'style', { value: 'percent' })), '50%');
+  assert.equal(number('0.5'), '0.5');
+});
+
+test('number options evaluate getters once per call', () => {
+  const { number } = intlTransformers('en-GB');
+  let reads = 0;
+  const options = { get style() { return reads++ === 0 ? 'percent' : 'decimal'; } };
+  assert.equal(number('0.5', options), '50%');
+  assert.equal(reads, 1);
+  assert.equal(number('0.5', options), '0.5');
+  assert.equal(reads, 2);
+});
+
 test.run();
