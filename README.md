@@ -285,13 +285,13 @@ pinned for reproducibility and is development-only.
 
 | Workload | MessageFormat (ops/s) | MessagePipe (ops/s) | MessagePipe / MessageFormat |
 | --- | ---: | ---: | ---: |
-| Plain text: `Wow` | 256,691,037 | 271,400,102 | 1.06× |
-| Interpolation: `Hello {planet}` | 128,767,263 | 128,096,099 | 0.99× |
-| Select: gender pronoun | 74,325,542 | 107,985,658 | 1.45× |
-| Number: EUR currency | 4,580,702 | 88,778,039 | 19.38× |
-| Number: dynamic fraction digits | 2,230,485 | 8,701,840 | 3.90× |
-| Date: day/month/year | 2,386,225 | 86,707,280 | 36.34× |
-| Plural: item count | 4,163,758 | 86,921,254 | 20.88× |
+| Plain text: `Wow` | 256,043,589 | 269,588,503 | 1.05× |
+| Interpolation: `Hello {planet}` | 130,454,294 | 129,213,173 | 0.99× |
+| Select: gender pronoun | 74,260,093 | 107,320,883 | 1.45× |
+| Number: EUR currency | 4,548,900 | 89,069,331 | 19.58× |
+| Number: dynamic fraction digits | 2,184,894 | 8,686,990 | 3.98× |
+| Date: day/month/year | 2,355,474 | 86,348,441 | 36.66× |
+| Plural: item count | 4,297,437 | 86,933,654 | 20.23× |
 
 Higher throughput is better. Select and the Intl workloads are faster in these
 measurements; interpolation is effectively tied. The small plain-text difference
@@ -299,14 +299,21 @@ is sensitive to loop overhead and does not establish a universal speed advantage
 
 The number, dynamic-number, date, and plural rows above rotate three values and benefit from
 bounded formatted-value reuse. To expose cache-miss costs, a second run rotates
-**1,000 distinct inputs** for each Intl workload:
+**1,000 distinct inputs** for interpolation and each Intl workload:
 
 | Workload | MessageFormat (ops/s) | MessagePipe (ops/s) | MessagePipe / MessageFormat |
 | --- | ---: | ---: | ---: |
-| Number: EUR currency | 4,694,507 | 6,450,686 | 1.37× |
-| Number: dynamic fraction digits | 2,021,094 | 2,734,714 | 1.35× |
-| Date: day/month/year | 2,352,332 | 2,740,688 | 1.17× |
-| Plural: item count | 3,378,905 | 5,726,339 | 1.69× |
+| Interpolation: `Hello {planet}` | 167,120,929 | 168,019,475 | 1.01× |
+| Number: EUR currency | 4,586,144 | 6,132,395 | 1.34× |
+| Number: dynamic fraction digits | 1,991,615 | 2,734,228 | 1.37× |
+| Date: day/month/year | 2,305,404 | 2,684,219 | 1.16× |
+| Plural: item count | 3,337,506 | 5,730,987 | 1.72× |
+
+Plain text compiles to a constant return. Simple interpolation compiles to a
+property read and string concatenation. Neither uses a rendered-string cache:
+lookup overhead can exceed the concatenation cost when inputs vary. These
+paths have little remaining work to eliminate, so small throughput differences
+should not be treated as reliable improvements.
 
 Both libraries compile once before timing and receive equivalent templates,
 locales, and inputs. Every input must produce the same expected string in both

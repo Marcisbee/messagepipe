@@ -48,7 +48,9 @@ if (varied) {
   const date = new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'numeric', day: 'numeric' });
   for (const workload of workloads) {
     const [name] = workload;
-    if (name === 'dynamic number') {
+    if (name === 'interpolation') {
+      workload[3] = Array.from({ length: 1000 }, (_, i) => [{ planet: 'Planet ' + i }, 'Hello Planet ' + i]);
+    } else if (name === 'dynamic number') {
       workload[3] = Array.from({ length: 1000 }, (_, i) => {
         const digits = i % 2 ? 3 : 2;
         const x = i / 4;
