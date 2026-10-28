@@ -98,4 +98,73 @@ test('number options evaluate getters once per call', () => {
   assert.equal(reads, 2);
 });
 
+test('prepared formatting preserves signed zero, mutable inputs and cache eviction', () => {
+  const pipe = MessagePipe(intlTransformers('en-GB'));
+  const number = pipe.compile('{x|number,minimumFractionDigits:2}');
+  assert.equal(number({ x: 0 }), '0.00');
+  assert.equal(number({ x: -0 }), '-0.00');
+  assert.equal(number({ x: 0 }), '0.00');
+  let amount = 1;
+  const mutable = { valueOf: () => amount++ };
+  assert.equal(number({ x: mutable }), '1.00');
+  assert.equal(number({ x: mutable }), '2.00');
+  for (let i = 1; i <= 110; i++) {
+    assert.equal(number({ x: i }), i + '.00');
+  }
+  assert.equal(number({ x: 0 }), '0.00');
+  const date = pipe.compile('{x|date,timeZone:"UTC"}');
+  const instant = new Date(0);
+  assert.equal(date({ x: instant }), '01/01/1970');
+  instant.setUTCDate(2);
+  assert.equal(date({ x: instant }), '02/01/1970');
+});
+
+test('compiled built-ins remain replaceable and custom options stay fresh', () => {
+  const transformers = intlTransformers('en-GB');
+  const original = transformers.number;
+  const pipe = MessagePipe(transformers);
+  const render = pipe.compile('{x|number,minimumFractionDigits:2}');
+  assert.equal(render({ x: 1 }), '1.00');
+  transformers.number = function(value, options) {
+    assert.is(this, transformers);
+    const digits = options.minimumFractionDigits;
+    options.minimumFractionDigits = 9;
+    return value + ':' + digits;
+  };
+  assert.equal(render({ x: 1 }), '1:2');
+  assert.equal(render({ x: 2 }), '2:2');
+  transformers.number = original;
+  assert.equal(render({ x: 1 }), '1.00');
+});
+
+test('constant preparation stays lazy and dynamic arguments remain live', () => {
+  const pipe = MessagePipe(intlTransformers('en-GB'));
+  const invalid = pipe.compile('{x|number,style:"invalid"}');
+  assert.throws(() => invalid({ x: 1 }), RangeError);
+  const render = pipe.compile('{x|number,minimumFractionDigits:{digits}}');
+  assert.equal(render({ x: 1, digits: 1 }), '1.0');
+  assert.equal(render({ x: 1, digits: 3 }), '1.000');
+  assert.equal(pipe.compileRaw('{x|number,minimumFractionDigits:2}')({ x: 1 }), ['', '1.00', '']);
+});
+
+test('adjacent placeholders preserve string coercion and raw values', () => {
+  const pipe = MessagePipe();
+  assert.equal(pipe.compile('{a}{b}')({ a: 1, b: 2 }), '12');
+  assert.equal(pipe.compileRaw('{a}{b}')({ a: 1, b: 2 }), ['', 1, '', 2, '']);
+});
+
+for (const locale of ['en-GB', 'de-DE', 'ar', 'lv']) {
+  test(`prepared formats preserve native Intl behavior in ${locale}`, () => {
+    const pipe = MessagePipe(intlTransformers(locale));
+    const number = pipe.compile('{x|number,style:"currency",currency:"EUR"}');
+    const expectedNumber = new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR' });
+    const plural = pipe.compile('{x|plural,zero:"zero # #",one:"one # #",two:"two # #",few:"few # #",many:"many # #",other:"other # #"}');
+    const rules = new Intl.PluralRules(locale);
+    for (const x of [0, -0, 1, 2, 5, 21, 1.5, NaN]) {
+      assert.equal(number({ x }), expectedNumber.format(x));
+      assert.equal(plural({ x }), rules.select(x) + ' ' + x + ' ' + x);
+    }
+  });
+}
+
 test.run();

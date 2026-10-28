@@ -12,7 +12,7 @@
 Formats message strings with number, date, plural, and select placeholders to create localized messages.
 
 * **Small.** Zero runtime dependencies.
-* **Fast.** Does absolute minimum amount of computations necessary. View [benchmarks](#benchmarks).
+* **Fast.** Precompiles messages and reuses formatters. View [benchmarks](#benchmarks).
 * **Tree Shakable.** Includes separate global transformers config that can be omitted.
 * **Pipe syntax.** Transformer functions can customized and chained.
 * **View framework support.** Use React/Preact etc. components as transformers.
@@ -242,6 +242,14 @@ const messagePipe = MessagePipe({
 })
 ```
 
+Built-in number, date, time, plural, and select pipes with scalar literal options
+prepare their options on first render. Number/date/time/plural pipes retain at
+most 100 formatted scalar values per compiled pipe. After 100 consecutive cache
+misses, that result cache is cleared and bypassed for the lifetime of the pipe.
+Mutable objects, omitted values, and negative zero bypass result caching.
+Dynamic options and custom transformers retain their normal per-call behavior.
+Replacing a transformer is still observed by already-compiled messages.
+
 Compiled messages are cached within each MessagePipe instance, so transformer
 sets and locales stay independent. Set `disableCache: true` to bypass message
 caching. Omitted props are treated as an empty object.
@@ -255,7 +263,7 @@ Now all the messages that get compiled from `messagePipe` can use this transform
 #### `compile`
 This is where given [message](#message) gets parsed and prepared for usage. It is very efficient compiler that does only 1 pass and prepares very tiny and performant function from it.
 
-Given this message `"Hello {name | capitalize}!"`, compiler will output this function `(a) => "Hello " + capitalize(a.name) + "!"` and that is the only thing that runs when executing it. No hidden performance penalties.
+Given this message `"Hello {name | capitalize}!"`, compiler will output this function `(a) => "Hello " + capitalize(a.name) + "!"` for the custom transformer call.
 
 #### `compileRaw`
 This is practically the same as [compile](#compile) but instead of it returning one string, it returns array of all of the things as a separate chunks so that this compiler can be used as part of React component for example.
@@ -274,50 +282,60 @@ pinned for reproducibility and is development-only.
 
 | Workload | MessageFormat (ops/s) | MessagePipe (ops/s) | MessagePipe / MessageFormat |
 | --- | ---: | ---: | ---: |
-| Plain text: `Wow` | 257,729,700 | 271,184,455 | 1.05× |
-| Interpolation: `Hello {planet}` | 129,552,306 | 129,540,407 | 1.00× |
-| Select: gender pronoun | 79,604,246 | 79,768,518 | 1.00× |
-| Number: EUR currency | 4,672,308 | 957,623 | 0.20× |
-| Date: day/month/year | 2,339,038 | 639,205 | 0.27× |
-| Plural: item count | 4,081,153 | 1,914,604 | 0.47× |
+| Plain text: `Wow` | 255,376,701 | 270,826,783 | 1.06× |
+| Interpolation: `Hello {planet}` | 129,480,176 | 129,084,392 | 1.00× |
+| Select: gender pronoun | 73,510,434 | 107,647,250 | 1.46× |
+| Number: EUR currency | 4,729,385 | 74,172,405 | 15.68× |
+| Date: day/month/year | 2,363,663 | 72,330,073 | 30.60× |
+| Plural: item count | 4,274,800 | 64,555,366 | 15.10× |
 
-Higher throughput is better; ratios below 1 mean MessagePipe is slower.
-Plain text, interpolation, and select are close enough that small differences
-should not be treated as a reliable advantage. MessageFormat is faster on the
-number, date, and plural workloads in this run.
+Higher throughput is better. Select and the Intl workloads are faster in these
+measurements; interpolation is effectively tied. The small plain-text difference
+is sensitive to loop overhead and does not establish a universal speed advantage.
+
+The number, date, and plural rows above rotate three values and benefit from
+bounded formatted-value reuse. To expose cache-miss costs, a second run rotates
+**1,000 distinct inputs** for each Intl workload:
+
+| Workload | MessageFormat (ops/s) | MessagePipe (ops/s) | MessagePipe / MessageFormat |
+| --- | ---: | ---: | ---: |
+| Number | 4,617,836 | 6,171,794 | 1.34× |
+| Date | 2,342,674 | 2,648,567 | 1.13× |
+| Plural | 3,332,201 | 3,767,459 | 1.13× |
 
 Both libraries compile once before timing and receive equivalent templates,
-locales, and inputs. The original plain-text, interpolation, and select cases
-are included alongside number, date, and plural formatting. Each non-constant
-workload rotates through three inputs; both libraries must match the same
-expected strings before measurement. Timed calls contribute to a checked output
+locales, and inputs. Every input must produce the same expected string in both
+libraries before measurement; timed calls contribute to a checked output
 checksum. Compiler initialization and compilation are excluded.
 
-Each result uses the median of seven samples of **1,000,000 calls**, following
-10,000 warmup calls per library and workload. Measurement order alternates
-between libraries. The runner prints both templates, inputs, all timing samples,
-and runtime metadata. Host: Linux x64 (WSL), AMD Ryzen 9 9950X, Node 22.23.2,
-ICU 78.2, `en-GB`, UTC. MessagePipe uses its minified CommonJS build;
-MessageFormat uses the functions returned by its installed compiler.
+Tables use the median of **21 samples** per library and workload, collected in
+three independent processes with seven samples each. Each sample performs
+1,000,000 calls after 10,000 warmup calls. Measurement order alternates between
+libraries. The runner prints templates, inputs, samples, and runtime metadata.
+Host: Linux x64 (WSL), AMD Ryzen 9 9950X, Node 22.23.2, ICU 78.2, `en-GB`, UTC.
+MessagePipe uses its minified CommonJS build; MessageFormat uses the functions
+returned by its installed compiler.
 
 ```sh
 npm ci
 npm run build
 npm run benchmark
+npm run benchmark -- --varied
 ```
 
-An optional CommonJS bundle path runs the same comparison against another
-MessagePipe build:
+Run each benchmark command three times to reproduce the table's sampling method.
+An optional CommonJS bundle path compares another MessagePipe build:
 
 ```sh
 npm run benchmark -- /path/to/messagepipe/dist/index.js
 ```
 
-These are warm, repeated-format microbenchmarks, not application-wide throughput
-guarantees. Cold construction, compilation, changing options, and other runtimes
-can give different results. Timing includes the shared input-rotation and
-checksum loop, which matters most for the fastest cases. Re-run on your target
-runtime and representative messages before drawing broader conclusions.
+These are warm formatting microbenchmarks. Literal options are prepared once,
+and repeated immutable values may reuse a formatted result. The varied-input
+mode exceeds the result cache capacity and exercises its automatic bypass.
+Compilation, dynamic options, mutable objects, other runtimes, and other messages
+can give different results. The shared input-rotation/checksum loop matters most
+for the fastest cases. These results do not prove superiority on every workload.
 
 ## Framework integration
 Works with React and Preact out of the box. Just swap out [`compile`](#compile) with [`compileRaw`](#compile) and good to go. This works because it returns raw array of values that was the output of selectors and transformers.

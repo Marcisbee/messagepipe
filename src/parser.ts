@@ -27,7 +27,9 @@ function reducePipe(acc: string, [pipeName, ...pipeProps]: [string, ...[string, 
     + ')';
 }
 
-export function parser(text: string): string[] {
+export function parser(text: string, prepare?: (
+  name: string, input: string, props: [string, string][]
+) => string | undefined): string[] {
   const output: string[] = [];
   let chunk = '';
 
@@ -49,7 +51,10 @@ export function parser(text: string): string[] {
           ? 'a' + selectorTrim
           : 'a.' + selectorTrim
         : '';
-      const output = localPipes.reduce(reducePipe, selector);
+      const output = localPipes.reduce((input, pipe) => {
+        const [name, ...props] = pipe;
+        return prepare?.(name.trim(), input, props) ?? reducePipe(input, pipe);
+      }, selector);
 
       return {
         index,

@@ -1,3 +1,5 @@
+import { preparations, memoizeFormat } from './prepared';
+
 // Bound retention when dynamic messages produce many distinct Intl options.
 function formatterCache<T>(create: (options: Record<string, any>) => T) {
   const cache = new Map<string, T>();
@@ -68,6 +70,35 @@ export function intlTransformers(locale: string = 'en-GB') {
     },
   };
 
+  preparations.set(globalTransformers.number, options => {
+    const format = number(options).format;
+    return memoizeFormat(value => format(value));
+  });
+  for (const kind of ['date', 'time'] as const) {
+    preparations.set(globalTransformers[kind], options => {
+      const defaults = options.dateStyle || options.timeStyle ? {} : kind === 'date'
+        ? { year: 'numeric', month: 'numeric', day: 'numeric' }
+        : { hour: 'numeric', minute: 'numeric', second: 'numeric' };
+      const format = date({ ...defaults, ...options }).format;
+      return memoizeFormat(value => format(value));
+    });
+  }
+  preparations.set(globalTransformers.plural, ({ zero, one, two, few, many, other, ...options }) => {
+    const rules = plural(options);
+    const choices: Record<string, string> = { zero, one, two, few, many, other };
+    const parts: Record<string, string[]> = Object.create(null);
+    for (const [category, text] of Object.entries(choices)) {
+      if (typeof text === 'string') {
+        parts[category] = text.split('#');
+      }
+    }
+    return memoizeFormat(value => {
+      const category = rules.select(value);
+      const chunks = parts[category] ?? (choices[category] == null ? parts.other : undefined);
+      return chunks ? chunks.join(value) : (choices[category] ?? other)?.split('#').join(value);
+    });
+  });
+
   return globalTransformers;
 }
 
@@ -80,6 +111,18 @@ export function defaultTransformers() {
       return Object.prototype.hasOwnProperty.call(options, value) ? options[value] : options.other;
     },
   };
+
+  const select = globalTransformers.select;
+  preparations.set(select, options => {
+    const choices = Object.assign(Object.create(null), options);
+    return value => {
+      if (typeof value !== 'string') {
+        return select(value, options);
+      }
+      const choice = choices[value];
+      return choice === undefined ? options.other : choice;
+    };
+  });
 
   return globalTransformers;
 }

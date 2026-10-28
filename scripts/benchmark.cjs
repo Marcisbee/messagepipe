@@ -6,7 +6,8 @@ const { cpus } = require('node:os');
 const { resolve } = require('node:path');
 const { performance } = require('node:perf_hooks');
 const MessageFormat = require('@messageformat/core');
-const bundle = resolve(process.argv[2] || 'dist/index.js');
+const varied = process.argv.includes('--varied');
+const bundle = resolve(process.argv.slice(2).find(arg => arg !== '--varied') || 'dist/index.js');
 const { MessagePipe, defaultTransformers, intlTransformers } = require(bundle);
 const pipe = MessagePipe({ ...defaultTransformers(), ...intlTransformers('en-GB') });
 const messageformat = new MessageFormat('en-GB');
@@ -36,6 +37,20 @@ const workloads = [
     [{ x: 0 }, '0 items'], [{ x: 1 }, 'one'], [{ x: 5 }, '5 items'],
   ]],
 ];
+
+if (varied) {
+  const number = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' });
+  const date = new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'numeric', day: 'numeric' });
+  for (const workload of workloads) {
+    const [name] = workload;
+    if (name === 'number' || name === 'date' || name === 'plural') {
+      workload[3] = Array.from({ length: 1000 }, (_, i) => {
+        const x = name === 'date' ? i * 86400000 : name === 'plural' ? i : i + 1000;
+        return [{ x }, name === 'number' ? number.format(x) : name === 'date' ? date.format(x) : x === 1 ? 'one' : x + ' items'];
+      });
+    }
+  }
+}
 
 function run(render, cases, count) {
   let checksum = 0;
@@ -79,5 +94,5 @@ console.log(JSON.stringify({
   node: process.version, icu: process.versions.icu,
   platform: process.platform, arch: process.arch, cpu: cpus()[0].model,
   locale: 'en-GB', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-  warmup, iterations, repeats, results,
+  varied, warmup, iterations, repeats, results,
 }, null, 2));
