@@ -264,23 +264,41 @@ So from the example that was before, the output of that message would be `(a) =>
 
 ## Benchmarks
 
-Repeated formatting before and after the Intl formatter-cache changes, measured
-on 2026-10-28. The baseline is commit `ef20fcd`; both revisions use minified
-CommonJS builds from the same esbuild version. Lower elapsed time is better.
+### MessagePipe vs. MessageFormat
 
-| Workload | Before | Current | Speedup |
+Measured on 2026-10-28 against **`@messageformat/core@3.4.1`**, the
+[ICU MessageFormat compiler](https://messageformat.github.io/messageformat/api/core.messageformat/).
+This is the MessageFormat v3 API, rather than the newer MessageFormat 2 syntax
+implemented by the `messageformat` v4 package. The comparison dependency is
+pinned for reproducibility and is development-only.
+
+| Workload | MessageFormat (ops/s) | MessagePipe (ops/s) | MessagePipe / MessageFormat |
 | --- | ---: | ---: | ---: |
-| Number: EUR currency, `1234.5` | 125.10 ms | 10.93 ms | 11.4× |
-| Date: default format, epoch `0` | 262.21 ms | 16.04 ms | 16.3× |
-| Plural: `5` items | 75.88 ms | 5.47 ms | 13.9× |
+| Plain text: `Wow` | 257,729,700 | 271,184,455 | 1.05× |
+| Interpolation: `Hello {planet}` | 129,552,306 | 129,540,407 | 1.00× |
+| Select: gender pronoun | 79,604,246 | 79,768,518 | 1.00× |
+| Number: EUR currency | 4,672,308 | 957,623 | 0.20× |
+| Date: day/month/year | 2,339,038 | 639,205 | 0.27× |
+| Plural: item count | 4,081,153 | 1,914,604 | 0.47× |
 
-Each cell is the median of five samples of 10,000 calls after 1,000 warmup calls.
-Messages are compiled once before timing, with fixed props and options. The
-runner checks the formatted output and prints every sample plus runtime metadata.
-The measured host used Linux x64 (WSL), an AMD Ryzen 9 9950X, Node 22.23.2,
-ICU 78.2, locale `en-GB`, and timezone UTC.
+Higher throughput is better; ratios below 1 mean MessagePipe is slower.
+Plain text, interpolation, and select are close enough that small differences
+should not be treated as a reliable advantage. MessageFormat is faster on the
+number, date, and plural workloads in this run.
 
-Run the current build:
+Both libraries compile once before timing and receive equivalent templates,
+locales, and inputs. The original plain-text, interpolation, and select cases
+are included alongside number, date, and plural formatting. Each non-constant
+workload rotates through three inputs; both libraries must match the same
+expected strings before measurement. Timed calls contribute to a checked output
+checksum. Compiler initialization and compilation are excluded.
+
+Each result uses the median of seven samples of **1,000,000 calls**, following
+10,000 warmup calls per library and workload. Measurement order alternates
+between libraries. The runner prints both templates, inputs, all timing samples,
+and runtime metadata. Host: Linux x64 (WSL), AMD Ryzen 9 9950X, Node 22.23.2,
+ICU 78.2, `en-GB`, UTC. MessagePipe uses its minified CommonJS build;
+MessageFormat uses the functions returned by its installed compiler.
 
 ```sh
 npm ci
@@ -288,20 +306,18 @@ npm run build
 npm run benchmark
 ```
 
-To compare the baseline with the same runner:
+An optional CommonJS bundle path runs the same comparison against another
+MessagePipe build:
 
 ```sh
-git worktree add --detach ../messagepipe-baseline ef20fcd
-(cd ../messagepipe-baseline && npm ci && npm run build)
-npm run benchmark -- ../messagepipe-baseline/dist/index.js
+npm run benchmark -- /path/to/messagepipe/dist/index.js
 ```
 
-These measurements cover repeated formatting with reusable Intl options.
-Compilation, cold formatter construction, and changing option combinations have
-different costs. Timings vary with runtime, hardware, and garbage collection;
-they are not application-wide throughput guarantees. The formatter caches retain
-at most 100 combinations per kind. Inherited or accessor-backed option objects
-bypass caching to preserve Intl behavior.
+These are warm, repeated-format microbenchmarks, not application-wide throughput
+guarantees. Cold construction, compilation, changing options, and other runtimes
+can give different results. Timing includes the shared input-rotation and
+checksum loop, which matters most for the fastest cases. Re-run on your target
+runtime and representative messages before drawing broader conclusions.
 
 ## Framework integration
 Works with React and Preact out of the box. Just swap out [`compile`](#compile) with [`compileRaw`](#compile) and good to go. This works because it returns raw array of values that was the output of selectors and transformers.

@@ -27,6 +27,7 @@
   },
   "homepage": "https://github.com/Marcisbee/messagepipe#readme",
   "devDependencies": {
+    "@messageformat/core": "3.4.1",
     "esbuild": "^0.15.5",
     "rome": "^0.9.0-next",
     "tsm": "^2.2.2",
