@@ -31,3 +31,5 @@ jobs:
       run: npm run declarations
       env:
         CI: true
+    - name: Package imports
+      run: npm run test:package

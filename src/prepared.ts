@@ -1,0 +1,71 @@
+// Internal compiler hooks: only built-ins opt in to constant-option preparation.
+export type Transform = (value: any, options?: Record<string, any>) => any;
+export const preparations = new WeakMap<Transform, (options: Record<string, any>) => Transform>();
+
+// Cache only immutable scalar inputs. Objects may have mutable coercion behavior,
+// and undefined can mean the current time. Keep signed zero distinct by bypassing it.
+export function memoizeFormat(format: Transform): Transform {
+  const cache = new Map<any, any>();
+  let misses = 0;
+  return value => {
+    if (misses >= 100) {
+      return format(value);
+    }
+    const type = typeof value;
+    if ((type !== 'string' && type !== 'number' && type !== 'bigint') || Object.is(value, -0)) {
+      return format(value);
+    }
+    const cached = cache.get(value);
+    if (cached !== undefined) {
+      misses = 0;
+      return cached;
+    }
+    const output = format(value);
+    if (++misses >= 100) {
+      cache.clear();
+      return output;
+    }
+    if (cache.size >= 100) {
+      cache.delete(cache.keys().next().value);
+    }
+    cache.set(value, output);
+    return output;
+  };
+}
+
+// Dynamic arguments are evaluated by the generated function before this lookup.
+// Only immutable option values can safely reuse a prepared closure.
+export function prepareDynamic(prepare: (options: Record<string, any>) => Transform, keys: string[]) {
+  const cache = new Map<string, Transform>();
+  let previous: Record<string, any> | undefined;
+  let previousRender: Transform | undefined;
+  return (options: Record<string, any>): Transform | undefined => {
+    let same = previous !== undefined;
+    let key = '';
+    for (const name of keys) {
+      const value = options[name];
+      const type = typeof value;
+      if ((value !== null && type !== 'string' && type !== 'number' && type !== 'boolean' && type !== 'undefined')
+        || (type === 'number' && !Number.isFinite(value))) {
+        return undefined;
+      }
+      same = same && Object.is(value, previous![name]);
+      const text = Object.is(value, -0) ? '-0' : String(value);
+      key += type + ':' + text.length + ':' + text;
+    }
+    if (same) {
+      return previousRender;
+    }
+    let render = cache.get(key);
+    if (!render) {
+      render = prepare(options);
+      if (cache.size >= 16) {
+        cache.delete(cache.keys().next().value!);
+      }
+      cache.set(key, render);
+    }
+    previous = options;
+    previousRender = render;
+    return render;
+  };
+}

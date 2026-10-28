@@ -1,18 +1,20 @@
 {
   "name": "messagepipe",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Formats message strings with number, date, plural, and select placeholders to create localized messages",
   "main": "dist/index.js",
-  "module": "dist/index.esm.js",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "scripts": {
     "dev": "node -r tsm dev.ts",
     "build": "npm run build:esm && npm run build:cjs",
-    "build:esm": "esbuild src/index.ts --minify --outfile=dist/index.esm.js --bundle --format=esm --sourcemap --define:process.env.NODE_ENV=\\\"production\\\"",
+    "build:esm": "esbuild src/index.ts --minify --outfile=dist/index.mjs --bundle --format=esm --sourcemap --define:process.env.NODE_ENV=\\\"production\\\"",
     "build:cjs": "esbuild src/index.ts --minify --outfile=dist/index.js --bundle --format=cjs --sourcemap --define:process.env.NODE_ENV=\\\"production\\\"",
     "declarations": "tsc --declarationDir dist --emitDeclarationOnly --declaration",
     "test": "uvu -r tsm",
-    "lint": "rome check ./src/"
+    "lint": "rome check ./src/",
+    "test:package": "node scripts/test-package.cjs",
+    "benchmark": "node scripts/benchmark.cjs"
   },
   "repository": {
     "type": "git",
@@ -25,6 +27,7 @@
   },
   "homepage": "https://github.com/Marcisbee/messagepipe#readme",
   "devDependencies": {
+    "@messageformat/core": "3.4.1",
     "esbuild": "^0.15.5",
     "rome": "^0.9.0-next",
     "tsm": "^2.2.2",
@@ -36,8 +39,9 @@
   ],
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
-      "import": "./dist/index.esm.js"
+      "import": "./dist/index.mjs"
     }
   }
 }

@@ -11,9 +11,8 @@
 
 Formats message strings with number, date, plural, and select placeholders to create localized messages.
 
-* **Small.** Between 700 bytes and 1.3 kilobytes (minified and gzipped).
-  Zero dependencies.
-* **Fast.** Does absolute minimum amount of computations necessary. View [benchmarks](#benchmarks).
+* **Small.** Zero runtime dependencies.
+* **Fast.** Precompiles messages and reuses formatters. View [benchmarks](#benchmarks).
 * **Tree Shakable.** Includes separate global transformers config that can be omitted.
 * **Pipe syntax.** Transformer functions can customized and chained.
 * **View framework support.** Use React/Preact etc. components as transformers.
@@ -111,6 +110,12 @@ const msgPipe = MessagePipe({
 This would be valid use case for it: `"Greetings {name | capitalize}!"`.
 
 ### Argument
+
+Single- and double-quoted argument values may contain delimiters such as commas,
+colons, pipes, and braces. JavaScript string escapes are preserved inside quotes.
+Outside placeholders, a backslash escapes the following character; use two
+backslashes for a literal backslash.
+
 To allow more functionality, we can use arguments, that are passed to transformer function.
 
 ```ts
@@ -197,13 +202,33 @@ const msg = compile('Currently it is {now | time}')
 msg({ now: new Date('1983-05-25 16:42') }) // "Currently it is 16:42:00"
 ```
 
+#### relativeTime
+
+Formats a duration in **milliseconds**, using hours by default. Set `type` to an
+Intl relative-time unit (singular or plural); other options, such as `numeric`,
+are forwarded to `Intl.RelativeTimeFormat`.
+
+```ts
+const msg = compile('{duration | relativeTime, type:"day", numeric:"auto"}')
+msg({ duration: 86400000 }) // "tomorrow" (English locale)
+```
+
+Months, quarters, and years use fixed durations of 30, 90, and 365 days. For
+calendar-aware differences, compute the duration in your application first.
+
+Intl formatters are reused per `intlTransformers(locale)` instance, with at most
+100 option combinations retained per formatter kind. Dynamic option values
+continue to work. Date and time component defaults are omitted when `dateStyle`
+or `timeStyle` is supplied. Plural selection falls back to `other` and replaces
+every `#` in the selected text; an explicitly empty selection stays empty.
+
 ## API
 
 ### `MessagePipe`
 This is the main function that takes in all the transformers that will be available to all the messages.
 
 ```ts
-function MessagePipe(transformers?: MessagePipeTransformers): {
+function MessagePipe(transformers?: MessagePipeTransformers, options?: { disableCache?: boolean }): {
   compileRaw(message: string): (props?: Record<string, any>) => string[]
   compile(message: string): (props?: Record<string, any>) => string
 }
@@ -217,12 +242,31 @@ const messagePipe = MessagePipe({
 })
 ```
 
+Built-in number, date, time, plural, and select pipes prepare scalar literal
+options on first render. Dynamic arguments are still evaluated on every render,
+with preparation reused for at most 16 primitive option combinations per pipe.
+Object-valued options use the generic path to preserve mutable coercion behavior.
+Each prepared number/date/time/plural variant retains at most 100 scalar results
+(up to 1,600 for a dynamic pipe). After 100 consecutive misses, that variant's
+result cache is cleared and bypassed for its lifetime. Mutable inputs, omitted
+values, and negative zero bypass result caching. Custom transformers keep their
+normal per-call behavior. Already-compiled messages observe replacement functions
+and resolve the transformer before evaluating its arguments.
+
+Compiled messages are cached within each MessagePipe instance, so transformer
+sets and locales stay independent. Set `disableCache: true` to bypass message
+caching. Omitted props are treated as an empty object.
+
+Message templates are trusted application code: compilation uses `Function`
+and evaluates JavaScript selector and argument expressions. Do not compile
+untrusted templates. This also requires a CSP that allows dynamic compilation.
+
 Now all the messages that get compiled from `messagePipe` can use this transformer like so `"{name | hello}"`.
 
 #### `compile`
 This is where given [message](#message) gets parsed and prepared for usage. It is very efficient compiler that does only 1 pass and prepares very tiny and performant function from it.
 
-Given this message `"Hello {name | capitalize}!"`, compiler will output this function `(a) => "Hello " + capitalize(a.name) + "!"` and that is the only thing that runs when executing it. No hidden performance penalties.
+Given this message `"Hello {name | capitalize}!"`, compiler will output this function `(a) => "Hello " + capitalize(a.name) + "!"` for the custom transformer call.
 
 #### `compileRaw`
 This is practically the same as [compile](#compile) but instead of it returning one string, it returns array of all of the things as a separate chunks so that this compiler can be used as part of React component for example.
@@ -230,13 +274,82 @@ This is practically the same as [compile](#compile) but instead of it returning 
 So from the example that was before, the output of that message would be `(a) => ["Hello ", capitalize(a.name), "!"]`.
 
 ## Benchmarks
-It is necessary for me that this library is as small and as fast as possible. Since this library compares directly with MessageFormat, I treated both as equal in benchmarks.
 
-Message | MessageFormat | MessagePipe | Improvement
-|-|-|-|-|
-["Wow"](https://fastbench.dev/Format-%22Wow%22-JtYOF/0) | 926,368 ops/s | __1,847,253 ops/s__ | 2x
-["Hello {planet}"](https://fastbench.dev/Format-%22Hello-planet%22-tKWLnH/0) | 560,131 ops/s | __1,024,051 ops/s__ | 1.8x
-[select transformer](https://fastbench.dev/Format-select-MovWE/0) | 209,513 ops/s | __337,226 ops/s__ | 1.6x
+### MessagePipe vs. MessageFormat
+
+Measured on 2026-10-28 against **`@messageformat/core@3.4.1`**, the
+[ICU MessageFormat compiler](https://messageformat.github.io/messageformat/api/core.messageformat/).
+This is the MessageFormat v3 API, rather than the newer MessageFormat 2 syntax
+implemented by the `messageformat` v4 package. The comparison dependency is
+pinned for reproducibility and is development-only.
+
+| Workload | MessageFormat (ops/s) | MessagePipe (ops/s) | MessagePipe / MessageFormat |
+| --- | ---: | ---: | ---: |
+| Plain text: `Wow` | 256,043,589 | 269,588,503 | 1.05× |
+| Interpolation: `Hello {planet}` | 130,454,294 | 129,213,173 | 0.99× |
+| Select: gender pronoun | 74,260,093 | 107,320,883 | 1.45× |
+| Number: EUR currency | 4,548,900 | 89,069,331 | 19.58× |
+| Number: dynamic fraction digits | 2,184,894 | 8,686,990 | 3.98× |
+| Date: day/month/year | 2,355,474 | 86,348,441 | 36.66× |
+| Plural: item count | 4,297,437 | 86,933,654 | 20.23× |
+
+Higher throughput is better. Select and the Intl workloads are faster in these
+measurements; interpolation is effectively tied. The small plain-text difference
+is sensitive to loop overhead and does not establish a universal speed advantage.
+
+The number, dynamic-number, date, and plural rows above rotate three values and benefit from
+bounded formatted-value reuse. To expose cache-miss costs, a second run rotates
+**1,000 distinct inputs** for interpolation and each Intl workload:
+
+| Workload | MessageFormat (ops/s) | MessagePipe (ops/s) | MessagePipe / MessageFormat |
+| --- | ---: | ---: | ---: |
+| Interpolation: `Hello {planet}` | 167,120,929 | 168,019,475 | 1.01× |
+| Number: EUR currency | 4,586,144 | 6,132,395 | 1.34× |
+| Number: dynamic fraction digits | 1,991,615 | 2,734,228 | 1.37× |
+| Date: day/month/year | 2,305,404 | 2,684,219 | 1.16× |
+| Plural: item count | 3,337,506 | 5,730,987 | 1.72× |
+
+Plain text compiles to a constant return. Simple interpolation compiles to a
+property read and string concatenation. Neither uses a rendered-string cache:
+lookup overhead can exceed the concatenation cost when inputs vary. These
+paths have little remaining work to eliminate, so small throughput differences
+should not be treated as reliable improvements.
+
+Both libraries compile once before timing and receive equivalent templates,
+locales, and inputs. Every input must produce the same expected string in both
+libraries before measurement; timed calls contribute to a checked output
+checksum. The dynamic-number workload alternates two and three fraction digits;
+MessagePipe uses dynamic pipe arguments and MessageFormat selects between two
+compiled number skeletons. Compiler initialization and compilation are excluded.
+
+Tables use the median of **21 samples** per library and workload, collected in
+three independent processes with seven samples each. Each sample performs
+1,000,000 calls after 10,000 warmup calls. Measurement order alternates between
+libraries. The runner prints templates, inputs, samples, and runtime metadata.
+Host: Linux x64 (WSL), AMD Ryzen 9 9950X, Node 22.23.2, ICU 78.2, `en-GB`, UTC.
+MessagePipe uses its minified CommonJS build; MessageFormat uses the functions
+returned by its installed compiler.
+
+```sh
+npm ci
+npm run build
+npm run benchmark
+npm run benchmark -- --varied
+```
+
+Run each benchmark command three times to reproduce the table's sampling method.
+An optional CommonJS bundle path compares another MessagePipe build:
+
+```sh
+npm run benchmark -- /path/to/messagepipe/dist/index.js
+```
+
+These are warm formatting microbenchmarks. Literal options are prepared once,
+and repeated immutable values may reuse a formatted result. The varied-input
+mode exceeds the result cache capacity and exercises its automatic bypass.
+Compilation, dynamic options, mutable objects, other runtimes, and other messages
+can give different results. The shared input-rotation/checksum loop matters most
+for the fastest cases. These results do not prove superiority on every workload.
 
 ## Framework integration
 Works with React and Preact out of the box. Just swap out [`compile`](#compile) with [`compileRaw`](#compile) and good to go. This works because it returns raw array of values that was the output of selectors and transformers.
